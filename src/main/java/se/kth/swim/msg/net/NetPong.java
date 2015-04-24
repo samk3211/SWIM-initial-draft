@@ -19,14 +19,13 @@
 package se.kth.swim.msg.net;
 
 
-//Speriamo che funzioni
-
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
 import se.sics.p2ptoolbox.util.network.NatedAddress;
 
 
 public class NetPong extends NetMsg<Ping> {
+    
 
     public NetPong(NatedAddress src, NatedAddress dst) {
         super(src, dst, new Ping());
