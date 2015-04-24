@@ -18,6 +18,8 @@
  */
 package se.kth.swim.msg.net;
 
+//TEST
+
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
 import se.sics.p2ptoolbox.util.network.NatedAddress;
