@@ -106,6 +106,9 @@ public class SwimComp extends ComponentDefinition {
         public void handle(NetPing event) {
             log.info("{} received ping from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             receivedPings++;
+            if(!bootstrapNodes.contains(event.getHeader().getSource())){
+                bootstrapNodes.add(event.getHeader().getSource());
+              }
             log.info("{} sending pong to partner:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             trigger(new NetPong(selfAddress, event.getHeader().getSource()), network);
         }

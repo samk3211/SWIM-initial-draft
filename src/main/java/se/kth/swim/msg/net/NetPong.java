@@ -19,6 +19,7 @@
 package se.kth.swim.msg.net;
 
 
+import java.util.List;
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
 import se.sics.p2ptoolbox.util.network.NatedAddress;
@@ -26,6 +27,7 @@ import se.sics.p2ptoolbox.util.network.NatedAddress;
 
 public class NetPong extends NetMsg<Ping> {
     
+    private List<InfoPiggyback> updates;
 
     public NetPong(NatedAddress src, NatedAddress dst) {
         super(src, dst, new Ping());
@@ -35,6 +37,10 @@ public class NetPong extends NetMsg<Ping> {
         super(header, content);
     }
 
+    public NetPong(NatedAddress src, NatedAddress dst, List<InfoPiggyback> updates) {
+        super(src, dst, new Ping());
+        this.updates=updates;
+    }
     @Override
     public NetMsg copyMessage(Header<NatedAddress> newHeader) {
         return new NetPong(newHeader, getContent());
