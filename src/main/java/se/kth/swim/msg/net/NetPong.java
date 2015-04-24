@@ -19,6 +19,7 @@
 package se.kth.swim.msg.net;
 
 
+import java.util.LinkedList;
 import java.util.List;
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
@@ -27,7 +28,7 @@ import se.sics.p2ptoolbox.util.network.NatedAddress;
 
 public class NetPong extends NetMsg<Ping> {
     
-    private List<InfoPiggyback> updates;
+    private LinkedList<InfoPiggyback> updates;
 
     public NetPong(NatedAddress src, NatedAddress dst) {
         super(src, dst, new Ping());
@@ -37,13 +38,27 @@ public class NetPong extends NetMsg<Ping> {
         super(header, content);
     }
 
-    public NetPong(NatedAddress src, NatedAddress dst, List<InfoPiggyback> updates) {
+    public NetPong(NatedAddress src, NatedAddress dst, LinkedList<InfoPiggyback> updates) {
         super(src, dst, new Ping());
-        this.updates=updates;
+        this.updates= new LinkedList<InfoPiggyback>(updates);
     }
     @Override
     public NetMsg copyMessage(Header<NatedAddress> newHeader) {
         return new NetPong(newHeader, getContent());
+    }
+
+    /**
+     * @return the updates
+     */
+    public LinkedList<InfoPiggyback> getUpdates() {
+        return updates;
+    }
+
+    /**
+     * @param updates the updates to set
+     */
+    public void setUpdates(LinkedList<InfoPiggyback> updates) {
+        this.updates = updates;
     }
 
 }

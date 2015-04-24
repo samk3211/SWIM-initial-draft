@@ -18,11 +18,15 @@
  */
 package se.kth.swim;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.kth.swim.msg.Status;
+import se.kth.swim.msg.net.InfoPiggyback;
+import se.kth.swim.msg.net.InfoType;
 import se.kth.swim.msg.net.NetPing;
 import se.kth.swim.msg.net.NetPong;
 import se.kth.swim.msg.net.NetStatus;
@@ -51,6 +55,8 @@ public class SwimComp extends ComponentDefinition {
     private final NatedAddress selfAddress;
     private final Set<NatedAddress> bootstrapNodes;
     private final NatedAddress aggregatorAddress;
+    
+    private LinkedList<InfoPiggyback> updates = new LinkedList<InfoPiggyback>();
 
     private UUID pingTimeoutId;
     private UUID statusTimeoutId;
@@ -62,6 +68,9 @@ public class SwimComp extends ComponentDefinition {
         this.selfAddress = init.selfAddress;
         log.info("{} initiating...", selfAddress);
         this.bootstrapNodes = init.bootstrapNodes;
+        for(NatedAddress na : bootstrapNodes){
+                 log.info("{} showing member list -> {}.", new Object[]{selfAddress.getId(), na.getId()});
+            }
         this.aggregatorAddress = init.aggregatorAddress;
 
         subscribe(handleStart, control);
@@ -76,8 +85,8 @@ public class SwimComp extends ComponentDefinition {
 
         @Override
         public void handle(Start event) {
-            log.info("{} starting...", new Object[]{selfAddress.getId()});
-
+            log.info("{} starting...", new Object[]{selfAddress.getId()});  
+            
             if (!bootstrapNodes.isEmpty()) {
                 schedulePeriodicPing();
             }
@@ -106,11 +115,23 @@ public class SwimComp extends ComponentDefinition {
         public void handle(NetPing event) {
             log.info("{} received ping from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             receivedPings++;
+            
             if(!bootstrapNodes.contains(event.getHeader().getSource())){
+                log.info("{} xxx ADDED {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 bootstrapNodes.add(event.getHeader().getSource());
+                if (pingTimeoutId == null) {
+                    schedulePeriodicPing();
+                }
+                //save the now info to be disseminated
+                updates.add(new InfoPiggyback(InfoType.NEWNODE,event.getHeader().getSource()));
+                 log.info("{} info added in the update list:{}", new Object[]{selfAddress.getId(), updates.getLast().getInfoTarget().getId()});
               }
+            
+             
             log.info("{} sending pong to partner:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-            trigger(new NetPong(selfAddress, event.getHeader().getSource()), network);
+            
+            
+            trigger(new NetPong(selfAddress, event.getHeader().getSource(), (LinkedList<InfoPiggyback>) updates.clone()), network);
         }
 
     };
@@ -120,6 +141,19 @@ public class SwimComp extends ComponentDefinition {
         @Override
         public void handle(NetPong event) {
             log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+            
+            if(event.getUpdates()!=null){
+                log.info("{} received pong from:{} --- CI SONO UPDATES QUI", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+                for(InfoPiggyback ipb : event.getUpdates()){
+                    if(ipb.getInfoType()==InfoType.NEWNODE){
+                        if(!ipb.getInfoTarget().equals(selfAddress) && !bootstrapNodes.contains(ipb.getInfoTarget())){
+                             log.info("{} updating via pong... Adding to the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                            bootstrapNodes.add(ipb.getInfoTarget());
+                        }
+                    }
+                }
+            }
+            
             receivedPongs++;
         }
 
@@ -129,10 +163,12 @@ public class SwimComp extends ComponentDefinition {
 
         @Override
         public void handle(PingTimeout event) {
+ 
             for (NatedAddress partnerAddress : bootstrapNodes) {
                 log.info("{} sending ping to partner:{}", new Object[]{selfAddress.getId(), partnerAddress});
                 trigger(new NetPing(selfAddress, partnerAddress), network);
             }
+            
         }
 
     };

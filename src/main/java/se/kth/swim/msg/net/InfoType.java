@@ -6,11 +6,13 @@
 
 package se.kth.swim.msg.net;
 
+import java.io.Serializable;
+
 /**
  *
  * @author fabriziodemaria
  */
-public enum InfoType {
+public enum InfoType implements Serializable {
     
      NEWNODE,
       SUSPECTEDNODE,
