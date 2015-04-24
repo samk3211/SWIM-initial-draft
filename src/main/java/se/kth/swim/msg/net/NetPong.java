@@ -18,7 +18,8 @@
  */
 package se.kth.swim.msg.net;
 
-//TEST
+
+
 
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
