@@ -19,7 +19,7 @@
 package se.kth.swim.msg.net;
 
 
-
+//Speriamo che funzioni
 
 import se.kth.swim.msg.Ping;
 import se.sics.kompics.network.Header;
