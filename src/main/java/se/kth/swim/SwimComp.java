@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.kth.swim.msg.Status;
 import se.kth.swim.msg.net.NetPing;
+import se.kth.swim.msg.net.NetPong;
 import se.kth.swim.msg.net.NetStatus;
 import se.sics.kompics.ComponentDefinition;
 import se.sics.kompics.Handler;
@@ -55,7 +56,8 @@ public class SwimComp extends ComponentDefinition {
     private UUID statusTimeoutId;
 
     private int receivedPings = 0;
-
+    private int receivedPongs = 0;
+    
     public SwimComp(SwimInit init) {
         this.selfAddress = init.selfAddress;
         log.info("{} initiating...", selfAddress);
@@ -65,6 +67,7 @@ public class SwimComp extends ComponentDefinition {
         subscribe(handleStart, control);
         subscribe(handleStop, control);
         subscribe(handlePing, network);
+        subscribe(handlePong, network);
         subscribe(handlePingTimeout, timer);
         subscribe(handleStatusTimeout, timer);
     }
@@ -103,6 +106,18 @@ public class SwimComp extends ComponentDefinition {
         public void handle(NetPing event) {
             log.info("{} received ping from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             receivedPings++;
+            log.info("{} sending pong to partner:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+            trigger(new NetPong(selfAddress, event.getHeader().getSource()), network);
+        }
+
+    };
+    
+        private Handler<NetPong> handlePong = new Handler<NetPong>() {
+
+        @Override
+        public void handle(NetPong event) {
+            log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+            receivedPongs++;
         }
 
     };
