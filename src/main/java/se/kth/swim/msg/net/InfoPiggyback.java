@@ -16,7 +16,6 @@ import se.sics.p2ptoolbox.util.network.NatedAddress;
 
 public class InfoPiggyback implements Serializable {
     
-    
     private InfoType infoType;
     private NatedAddress infoTarget;
     

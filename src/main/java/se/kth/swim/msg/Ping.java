@@ -18,9 +18,23 @@
  */
 
 package se.kth.swim.msg;
+   
+import java.util.ArrayList;
+import se.kth.swim.msg.net.InfoPiggyback;
+import se.sics.p2ptoolbox.util.network.NatedAddress;
+
 
 /**
  * @author Alex Ormenisan <aaor@sics.se>
  */
 public class Ping {
+    
+        public ArrayList<InfoPiggyback> infoList;
+    
+        public Ping(){       
+        }
+      
+        public Ping(ArrayList<InfoPiggyback> a){        
+          infoList = new ArrayList<InfoPiggyback>(a);
+      }
 }

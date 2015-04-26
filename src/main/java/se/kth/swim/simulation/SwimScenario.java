@@ -139,6 +139,7 @@ public class SwimScenario {
 
                 @Override
                 public HostComp.HostInit getNodeComponentInit(NatedAddress aggregatorServer, Set<NatedAddress> bootstrapNodes) {
+                    
                     if (nodeId % 2 == 0) {
                         //open address
                         nodeAddress = new BasicNatedAddress(new BasicAddress(localHost, 12345, nodeId));
@@ -252,7 +253,7 @@ public class SwimScenario {
                 StochasticProcess startPeers = new StochasticProcess() {
                     {
                         eventInterArrivalTime(constant(1000));
-                        raise(3, startNodeOp, new GenIntSequentialDistribution(new Integer[]{10, 13, 17}));
+                        raise(7, startNodeOp, new GenIntSequentialDistribution(new Integer[]{10, 12, 14, 16, 18, 20 , 22}));
                     }
                 };
                 
@@ -297,8 +298,8 @@ public class SwimScenario {
 //                stopPeers.startAfterTerminationOf(10000, startPeers);
 //                deadLinks1.startAfterTerminationOf(10000,startPeers);
 //                disconnectedNodes1.startAfterTerminationOf(10000, startPeers);
-                fetchSimulationResult.startAfterTerminationOf(200000, startPeers);
-                terminateAfterTerminationOf(10000, fetchSimulationResult);
+                fetchSimulationResult.startAfterTerminationOf(20000, startPeers);
+                terminateAfterTerminationOf(1000, fetchSimulationResult);
 
             }
         };

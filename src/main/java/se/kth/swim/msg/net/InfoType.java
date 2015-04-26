@@ -13,9 +13,7 @@ import java.io.Serializable;
  * @author fabriziodemaria
  */
 public enum InfoType implements Serializable {
-    
-     NEWNODE,
+      NEWNODE,
       SUSPECTEDNODE,
       DEADNODE
-    
 }

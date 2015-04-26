@@ -18,8 +18,7 @@
  */
 package se.kth.swim;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -56,8 +55,8 @@ public class SwimComp extends ComponentDefinition {
     private final Set<NatedAddress> bootstrapNodes;
     private final NatedAddress aggregatorAddress;
     
-    private LinkedList<InfoPiggyback> updates = new LinkedList<InfoPiggyback>();
-
+    private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
+            
     private UUID pingTimeoutId;
     private UUID statusTimeoutId;
 
@@ -117,21 +116,20 @@ public class SwimComp extends ComponentDefinition {
             receivedPings++;
             
             if(!bootstrapNodes.contains(event.getHeader().getSource())){
-                log.info("{} xxx ADDED {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+                log.info("{} Received ping from node that is not in my membership list {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 bootstrapNodes.add(event.getHeader().getSource());
                 if (pingTimeoutId == null) {
                     schedulePeriodicPing();
                 }
                 //save the now info to be disseminated
-                updates.add(new InfoPiggyback(InfoType.NEWNODE,event.getHeader().getSource()));
-                 log.info("{} info added in the update list:{}", new Object[]{selfAddress.getId(), updates.getLast().getInfoTarget().getId()});
-              }
+                 updates.add(new InfoPiggyback(InfoType.NEWNODE,event.getHeader().getSource()));
+                 log.info("{} New node info added in the membership list. Info added is -> {}", new Object[]{selfAddress.getId(), updates.get(updates.size()-1).getInfoTarget().getId()});
+            }
             
              
-            log.info("{} sending pong to partner:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+            log.info("{} sending pong to back to :{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             
-            
-            trigger(new NetPong(selfAddress, event.getHeader().getSource(), (LinkedList<InfoPiggyback>) updates.clone()), network);
+            trigger(new NetPong(selfAddress, event.getHeader().getSource(), updates), network);
         }
 
     };
@@ -141,10 +139,13 @@ public class SwimComp extends ComponentDefinition {
         @Override
         public void handle(NetPong event) {
             log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-            
-            if(event.getUpdates()!=null){
-                log.info("{} received pong from:{} --- CI SONO UPDATES QUI", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-                for(InfoPiggyback ipb : event.getUpdates()){
+                
+            if(event.getContent().infoList!=null){
+                log.info("There is a list in Pong msg", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+                for(Object ipb2 : event.getContent().infoList){
+                    InfoPiggyback ipb = (InfoPiggyback)ipb2;
+                    log.info("{} Iterating update list in the Pong message {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
+                    
                     if(ipb.getInfoType()==InfoType.NEWNODE){
                         if(!ipb.getInfoTarget().equals(selfAddress) && !bootstrapNodes.contains(ipb.getInfoTarget())){
                              log.info("{} updating via pong... Adding to the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
