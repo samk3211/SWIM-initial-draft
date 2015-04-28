@@ -15,5 +15,6 @@ import java.io.Serializable;
 public enum InfoType implements Serializable {
       NEWNODE,
       SUSPECTEDNODE,
-      DEADNODE
+      DEADNODE,
+      ALIVENODE
 }

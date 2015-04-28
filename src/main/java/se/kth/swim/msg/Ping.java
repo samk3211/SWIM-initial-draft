@@ -21,7 +21,6 @@ package se.kth.swim.msg;
    
 import java.util.ArrayList;
 import se.kth.swim.msg.net.InfoPiggyback;
-import se.sics.p2ptoolbox.util.network.NatedAddress;
 
 
 /**
