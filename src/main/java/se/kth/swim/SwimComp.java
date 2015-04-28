@@ -19,6 +19,7 @@
 package se.kth.swim;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -38,6 +39,7 @@ import se.sics.kompics.Stop;
 import se.sics.kompics.network.Network;
 import se.sics.kompics.timer.CancelTimeout;
 import se.sics.kompics.timer.SchedulePeriodicTimeout;
+import se.sics.kompics.timer.ScheduleTimeout;
 import se.sics.kompics.timer.Timeout;
 import se.sics.kompics.timer.Timer;
 import se.sics.p2ptoolbox.util.network.NatedAddress;
@@ -54,10 +56,12 @@ public class SwimComp extends ComponentDefinition {
     private final NatedAddress selfAddress;
     private final Set<NatedAddress> bootstrapNodes;
     private final NatedAddress aggregatorAddress;
+    private Map<UUID,NatedAddress> waitingPong;
     
     private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
             
     private UUID pingTimeoutId;
+    private UUID pongTimeoutId;
     private UUID statusTimeoutId;
 
     private int receivedPings = 0;
@@ -77,6 +81,7 @@ public class SwimComp extends ComponentDefinition {
         subscribe(handlePing, network);
         subscribe(handlePong, network);
         subscribe(handlePingTimeout, timer);
+        subscribe(handlePongTimeout,timer);
         subscribe(handleStatusTimeout, timer);
     }
 
@@ -168,7 +173,34 @@ public class SwimComp extends ComponentDefinition {
             for (NatedAddress partnerAddress : bootstrapNodes) {
                 log.info("{} sending ping to partner:{}", new Object[]{selfAddress.getId(), partnerAddress});
                 trigger(new NetPing(selfAddress, partnerAddress), network);
+                
+		ScheduleTimeout st = new ScheduleTimeout(1000);
+                PongTimeout pt= new PongTimeout(st);
+	        st.setTimeoutEvent(pt);
+                pongTimeoutId =  pt.getTimeoutId();
+                waitingPong.put(pongTimeoutId,partnerAddress);
+		trigger(st, timer);
+               
             }
+            
+        }
+
+    };
+    
+    
+        private Handler<PongTimeout> handlePongTimeout = new Handler<PongTimeout>() {
+
+        @Override
+        public void handle(PongTimeout event) {
+            
+            for(NatedAddress a: waitingPong.values()){
+                if(waitingPong.containsKey(event.getTimeoutId())){
+                    if(waitingPong.get(event.getTimeoutId()).equals(a)){
+                        updates.add(new InfoPiggyback(InfoType.DEADNODE,a));
+                    }
+                }
+            }
+ 
             
         }
 
@@ -235,6 +267,13 @@ public class SwimComp extends ComponentDefinition {
     private static class PingTimeout extends Timeout {
 
         public PingTimeout(SchedulePeriodicTimeout request) {
+            super(request);
+        }
+    }
+    
+        private static class PongTimeout extends Timeout {
+
+        public PongTimeout(ScheduleTimeout request) {
             super(request);
         }
     }
