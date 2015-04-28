@@ -253,23 +253,27 @@ public class SwimScenario {
                 StochasticProcess startPeers = new StochasticProcess() {
                     {
                         eventInterArrivalTime(constant(1000));
-                        raise(7, startNodeOp, new GenIntSequentialDistribution(new Integer[]{10, 12, 14, 16, 18, 20 , 22}));
+                        raise(11, startNodeOp, new GenIntSequentialDistribution(new Integer[]{10, 12, 14, 16,18, 20, 22, 24, 26, 28 ,30}));
                     }
                 };
                 
                 StochasticProcess startAdditionalPeer = new StochasticProcess() {
                     {
                         eventInterArrivalTime(constant(1000));
-                        raise(1, startNodeOp, new GenIntSequentialDistribution(new Integer[]{22}));
+                        raise(1, startNodeOp, new GenIntSequentialDistribution(new Integer[]{24}));
                     }
                 };
 
                 StochasticProcess killPeers = new StochasticProcess() {
                     {
                         eventInterArrivalTime(constant(1000));
-                        raise(1, killNodeOp, new ConstantDistribution(Integer.class, 10));
+                        raise(1, killNodeOp, new ConstantDistribution(Integer.class, 20));
+                        raise(1, killNodeOp, new ConstantDistribution(Integer.class, 12));
+                        
                     }
                 };
+                
+                
 
                 StochasticProcess deadLinks1 = new StochasticProcess() {
                     {
@@ -294,11 +298,12 @@ public class SwimScenario {
 
                 startAggregator.start();
                 startPeers.startAfterTerminationOf(1000, startAggregator);
-                //startAdditionalPeer.startAfterStartOf(100000, startPeers);
+                 killPeers.startAfterStartOf(10000, startPeers);
+//                startAdditionalPeer.startAfterStartOf(10000, startPeers);
 //                stopPeers.startAfterTerminationOf(10000, startPeers);
 //                deadLinks1.startAfterTerminationOf(10000,startPeers);
 //                disconnectedNodes1.startAfterTerminationOf(10000, startPeers);
-                fetchSimulationResult.startAfterTerminationOf(20000, startPeers);
+                fetchSimulationResult.startAfterTerminationOf(40000, startPeers);
                 terminateAfterTerminationOf(1000, fetchSimulationResult);
 
             }

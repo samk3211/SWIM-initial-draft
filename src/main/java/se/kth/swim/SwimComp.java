@@ -19,7 +19,7 @@
 package se.kth.swim;
 
 import java.util.ArrayList;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -56,13 +56,12 @@ public class SwimComp extends ComponentDefinition {
     private final NatedAddress selfAddress;
     private final Set<NatedAddress> bootstrapNodes;
     private final NatedAddress aggregatorAddress;
-    private Map<UUID,NatedAddress> waitingPong;
     
     private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
             
     private UUID pingTimeoutId;
-    private UUID pongTimeoutId;
     private UUID statusTimeoutId;
+    private HashMap<NatedAddress,UUID> ackTimeoutIds = new HashMap<NatedAddress,UUID>();
 
     private int receivedPings = 0;
     private int receivedPongs = 0;
@@ -75,14 +74,15 @@ public class SwimComp extends ComponentDefinition {
                  log.info("{} showing member list -> {}.", new Object[]{selfAddress.getId(), na.getId()});
             }
         this.aggregatorAddress = init.aggregatorAddress;
-
+        
         subscribe(handleStart, control);
         subscribe(handleStop, control);
         subscribe(handlePing, network);
         subscribe(handlePong, network);
         subscribe(handlePingTimeout, timer);
-        subscribe(handlePongTimeout,timer);
         subscribe(handleStatusTimeout, timer);
+        subscribe(handleAckTimeout, timer);
+        
     }
 
     private Handler<Start> handleStart = new Handler<Start>() {
@@ -120,9 +120,12 @@ public class SwimComp extends ComponentDefinition {
             log.info("{} received ping from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             receivedPings++;
             
+            //Ping from unknown node
             if(!bootstrapNodes.contains(event.getHeader().getSource())){
                 log.info("{} Received ping from node that is not in my membership list {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 bootstrapNodes.add(event.getHeader().getSource());
+                
+                //Maybe it is the first node in the list -> start pingTimeout
                 if (pingTimeoutId == null) {
                     schedulePeriodicPing();
                 }
@@ -132,8 +135,7 @@ public class SwimComp extends ComponentDefinition {
             }
             
              
-            log.info("{} sending pong to back to :{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-            
+            log.info("{} sending pong to back to :{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});            
             trigger(new NetPong(selfAddress, event.getHeader().getSource(), updates), network);
         }
 
@@ -144,17 +146,32 @@ public class SwimComp extends ComponentDefinition {
         @Override
         public void handle(NetPong event) {
             log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-                
+            
+            //handle the ack mechanism
+            if(ackTimeoutIds.containsKey(event.getSource())){
+                System.out.println("Ricevuto ack");
+                cancelAck(event.getSource());
+            }
+          
+
             if(event.getContent().infoList!=null){
                 log.info("There is a list in Pong msg", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+         
                 for(Object ipb2 : event.getContent().infoList){
                     InfoPiggyback ipb = (InfoPiggyback)ipb2;
                     log.info("{} Iterating update list in the Pong message {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
-                    
+                     
                     if(ipb.getInfoType()==InfoType.NEWNODE){
                         if(!ipb.getInfoTarget().equals(selfAddress) && !bootstrapNodes.contains(ipb.getInfoTarget())){
                              log.info("{} updating via pong... Adding to the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
                             bootstrapNodes.add(ipb.getInfoTarget());
+                            //TODO ALSO UPDATE THE UPDATE LIST
+                        }
+                    } else if (ipb.getInfoType()==InfoType.DEADNODE){
+                        if(bootstrapNodes.contains(ipb.getInfoTarget())){
+                              log.info("{} updating via pong... Removing from the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                            bootstrapNodes.remove(ipb.getInfoTarget());
+                             //TODO ALSO UPDATE THE UPDATE LIST
                         }
                     }
                 }
@@ -169,38 +186,26 @@ public class SwimComp extends ComponentDefinition {
 
         @Override
         public void handle(PingTimeout event) {
- 
-            for (NatedAddress partnerAddress : bootstrapNodes) {
-                log.info("{} sending ping to partner:{}", new Object[]{selfAddress.getId(), partnerAddress});
-                trigger(new NetPing(selfAddress, partnerAddress), network);
-                
-		ScheduleTimeout st = new ScheduleTimeout(1000);
-                PongTimeout pt= new PongTimeout(st);
-	        st.setTimeoutEvent(pt);
-                pongTimeoutId =  pt.getTimeoutId();
-                waitingPong.put(pongTimeoutId,partnerAddress);
-		trigger(st, timer);
-               
-            }
             
-        }
-
-    };
-    
-    
-        private Handler<PongTimeout> handlePongTimeout = new Handler<PongTimeout>() {
-
-        @Override
-        public void handle(PongTimeout event) {
-            
-            for(NatedAddress a: waitingPong.values()){
-                if(waitingPong.containsKey(event.getTimeoutId())){
-                    if(waitingPong.get(event.getTimeoutId()).equals(a)){
-                        updates.add(new InfoPiggyback(InfoType.DEADNODE,a));
-                    }
+            if(bootstrapNodes.isEmpty()){
+                System.out.println("LISTA VUOTA");
+                cancelPeriodicPing();
+            } else {
+                if(pingTimeoutId==null){
+                    schedulePeriodicPing();
                 }
             }
  
+            for (NatedAddress partnerAddress : bootstrapNodes) {
+                //check if still waiting for an answer from the node
+                if(!ackTimeoutIds.containsKey(partnerAddress)){
+                    log.info("{} sending ping to partner:{}", new Object[]{selfAddress.getId(), partnerAddress});
+                    scheduleAck(partnerAddress);
+                    trigger(new NetPing(selfAddress, partnerAddress), network);
+                } else {
+                    log.info("{} FAIL sending ping to partner (waiting for ack):{}", new Object[]{selfAddress.getId(), partnerAddress});
+                }
+            }
             
         }
 
@@ -212,6 +217,25 @@ public class SwimComp extends ComponentDefinition {
         public void handle(StatusTimeout event) {
             log.info("{} sending status to aggregator:{}", new Object[]{selfAddress.getId(), aggregatorAddress});
             trigger(new NetStatus(selfAddress, aggregatorAddress, new Status(receivedPings)), network);
+        }
+
+    };
+    
+    private Handler<AckTimeout> handleAckTimeout = new Handler<AckTimeout>() {
+
+        @Override
+        public void handle(AckTimeout event) {
+            log.info("{} no answer from node: {}", new Object[]{selfAddress.getId(), event.getAddress().getId()});
+              ackTimeoutIds.remove(event.getAddress());
+            //unrelated info
+            for(NatedAddress i : ackTimeoutIds.keySet())
+                System.out.println("In the ack list " + i.getId());
+            //update info list
+            //maybe we can delete the old info related to the DEAD node
+            updates.add(new InfoPiggyback(InfoType.DEADNODE, event.getAddress()));
+            if(bootstrapNodes.contains(event.getAddress()))
+                System.out.println("Removing node " + event.getAddress().getId() + " from the member list of " + selfAddress.getId());
+                bootstrapNodes.remove(event.getAddress());
         }
 
     };
@@ -243,6 +267,21 @@ public class SwimComp extends ComponentDefinition {
         trigger(cpt, timer);
         statusTimeoutId = null;
     }
+    
+    private void scheduleAck(NatedAddress address) {
+        ScheduleTimeout spt = new ScheduleTimeout(20000);
+        AckTimeout sc = new AckTimeout(spt, address);
+        spt.setTimeoutEvent(sc);
+        ackTimeoutIds.put(address,sc.getTimeoutId());
+        trigger(spt, timer);
+    }
+
+    private void cancelAck(NatedAddress address) {
+        CancelTimeout cpt = new CancelTimeout(ackTimeoutIds.get(address));
+        System.out.println("Canceling ACK  TIMEOUT");
+        trigger(cpt, timer);
+        ackTimeoutIds.remove(address);
+    }
 
     public static class SwimInit extends Init<SwimComp> {
 
@@ -271,10 +310,20 @@ public class SwimComp extends ComponentDefinition {
         }
     }
     
-        private static class PongTimeout extends Timeout {
+    private static class AckTimeout extends Timeout {
 
-        public PongTimeout(ScheduleTimeout request) {
+        private final NatedAddress address;
+        
+        public AckTimeout(ScheduleTimeout request, NatedAddress address) {
             super(request);
+            this.address = address;
+        }
+
+        /**
+         * @return the address
+         */
+        public NatedAddress getAddress() {
+            return address;
         }
     }
 }
