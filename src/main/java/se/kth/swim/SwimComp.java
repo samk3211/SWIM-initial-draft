@@ -53,7 +53,7 @@ import se.sics.p2ptoolbox.util.network.NatedAddress;
  */
 public class SwimComp extends ComponentDefinition {
     
-    private static final Integer DISSEMINATION_VALUE = 2;
+    private static final Integer DISSEMINATION_VALUE = 3;
     
     private static final Logger log = LoggerFactory.getLogger(SwimComp.class);
     private Positive<Network> network = requires(Network.class);
@@ -131,32 +131,35 @@ public class SwimComp extends ComponentDefinition {
         
         @Override
         public void handle(NetPing event) {
+            printmyneigh();
             log.info("{} received ping from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             receivedPings++;
             
             //Ping from unknown node
-            if(!bootstrapNodes.contains(event.getHeader().getSource())){
+            if(!checkNeighborsId(event.getHeader().getSource())){
                 log.info("{} Received ping from node that is not in my membership list {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+                log.info("{} adding happily the node cccc {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 bootstrapNodes.add(event.getHeader().getSource());
                 
                 //Maybe it is the first node in the list -> start pingTimeout
                 if (pingTimeoutId == null) {
                     schedulePeriodicPing();
                 }
+                
                 //save the now info to be disseminated
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.NEWNODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
                 
             }
             
-            if(suspectedNodes.contains(event.getHeader().getSource())){
+            if(checkNeighborsId(event.getHeader().getSource())){
                 suspectedNodes.remove(event.getHeader().getSource());
-                updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
-                
+                updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);       
             }
             
             log.info("{} sending pong to back to :{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             
             updates = new ArrayList<InfoPiggyback>(updatesDisseminationCounter.keySet());
+            
             trigger(new NetPong(selfAddress, event.getHeader().getSource(), updates), network);
             
             //decrease counters and remove 0
@@ -182,10 +185,11 @@ public class SwimComp extends ComponentDefinition {
         
         @Override
         public void handle(NetPong event) {
+            printmyneigh();
             log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             
             //handle the ack mechanism
-            if(ackTimeoutIds.containsKey(event.getSource())){
+            if(checkNeighborsId(event.getSource())){
                 System.out.println("Ricevuto ack");
                 cancelAck(event.getSource());
             }
@@ -193,49 +197,48 @@ public class SwimComp extends ComponentDefinition {
             
             if(event.getContent().infoList!=null && event.getContent().infoList.size()>0){
                 
-                log.info("There is a list in Pong msg", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
+                log.info("There is a list in Pong msg from ", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 
                 for(Object ipb2 : event.getContent().infoList){
                     InfoPiggyback ipb = (InfoPiggyback)ipb2;
-                    //log.info("{} Iterating update list in the Pong message {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
                     
                     //change to switch-case man :)
                     if(ipb.getInfoType()==InfoType.NEWNODE){
-                        if(!ipb.getInfoTarget().equals(selfAddress) && !bootstrapNodes.contains(ipb.getInfoTarget())){
-                            log.info("{} updating via pong... Adding to the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                        if(!ipb.getInfoTarget().equals(selfAddress) && !checkNeighborsId(ipb.getInfoTarget())){
+                            log.info("{} adding happily the node from PB info {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
                             bootstrapNodes.add(ipb.getInfoTarget());
-                            //TODO ALSO UPDATE THE UPDATE LIST
+                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.NEWNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     } else if (ipb.getInfoType()==InfoType.DEADNODE){
-                        if(bootstrapNodes.contains(ipb.getInfoTarget())){
-                            log.info("{} updating via pong... Removing from the list -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                        if(checkNeighborsId(ipb.getInfoTarget())){
+                            log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
                             bootstrapNodes.remove(ipb.getInfoTarget());
-                            //TODO ALSO UPDATE THE UPDATE LIST
+                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.DEADNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     } else if (ipb.getInfoType()==InfoType.ALIVENODE){
-                       
-                        if(suspectedNodes.contains(ipb.getInfoTarget())){
-                             log.info("{} updating via pong... This node is actually alive -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                        if(checkSuspectedId(ipb.getInfoTarget())){
                             suspectedNodes.remove(ipb.getInfoTarget());
-                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
+                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                             if(deadTimeoutIds.containsKey(ipb.getInfoTarget())){
                                 cancelDeadTimeout(ipb.getInfoTarget());
                             }
                         }
                     } else if (ipb.getInfoType()==InfoType.SUSPECTEDNODE){
-                       if(!suspectedNodes.contains(ipb.getInfoTarget())){
-                            log.info("{} updating via pong... This node is suspected -> {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                        if(ipb.getInfoTarget().getId()==selfAddress.getId()){
+                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,selfAddress), DISSEMINATION_VALUE);
+                        } else if(!checkSuspectedId(ipb.getInfoTarget())){
                             suspectedNodes.add(ipb.getInfoTarget());
-                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.SUSPECTEDNODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
+                            updatesDisseminationCounter.put(new InfoPiggyback(InfoType.SUSPECTEDNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     }
                     
                 }
             }
             receivedPongs++;
-        }
-        
+        }     
     };
+    
+    
     
     private Handler<PingTimeout> handlePingTimeout = new Handler<PingTimeout>() {
         
@@ -243,7 +246,6 @@ public class SwimComp extends ComponentDefinition {
         public void handle(PingTimeout event) {
             
             if(bootstrapNodes.isEmpty()){
-                System.out.println("LISTA VUOTA");
                 cancelPeriodicPing();
                 return;
             } else {
@@ -292,7 +294,7 @@ public class SwimComp extends ComponentDefinition {
                 suspectedNodes.add(event.getAddress());
                 log.info("{}  suspects node: {}", new Object[]{selfAddress.getId(), event.getAddress().getId()});
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.SUSPECTEDNODE, event.getAddress()),DISSEMINATION_VALUE);
-               
+                
                 //check that there is no timeout associated to the event.getAddress already, otherwise the prev UUID is lost
                 if(!deadTimeoutIds.containsKey(event.getAddress()))
                     scheduleDeadTimeout(event.getAddress());
@@ -304,15 +306,16 @@ public class SwimComp extends ComponentDefinition {
         
         @Override
         public void handle(DeadTimeout event) {
-            
+            printmyneigh();
             if(deadTimeoutIds.containsKey(event.getAddress()))
                 cancelDeadTimeout(event.getAddress());
             
             if(suspectedNodes.contains(event.getAddress())){
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.DEADNODE, event.getAddress()),DISSEMINATION_VALUE);
-                if(bootstrapNodes.contains(event.getAddress()))
-                    System.out.println("Removing node " + event.getAddress().getId() + " from the member list of " + selfAddress.getId());
-                bootstrapNodes.remove(event.getAddress());
+                if(checkNeighborsId(event.getAddress())){
+                    log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), event.getAddress().getId()});
+                    bootstrapNodes.remove(event.getAddress());
+                }
                 suspectedNodes.remove(event.getAddress());
             }
             
@@ -349,23 +352,21 @@ public class SwimComp extends ComponentDefinition {
     }
     
     private void scheduleAck(NatedAddress address) {
-        ScheduleTimeout spt = new ScheduleTimeout(2000);
+        ScheduleTimeout spt = new ScheduleTimeout(5000);
         AckTimeout sc = new AckTimeout(spt, address);
         spt.setTimeoutEvent(sc);
         ackTimeoutIds.put(address,sc.getTimeoutId());
-        System.out.println("Sto facendo partire questo ACK TO" + sc.getTimeoutId());
         trigger(spt, timer);
     }
     
     private void cancelAck(NatedAddress address) {
         CancelTimeout cpt = new CancelTimeout(ackTimeoutIds.get(address));
-        System.out.println("Canceling ACK TIMEOUT" + ackTimeoutIds.get(address));
         trigger(cpt, timer);
         ackTimeoutIds.remove(address);
     }
     
     private void scheduleDeadTimeout(NatedAddress address) {
-        ScheduleTimeout spt = new ScheduleTimeout(5000);
+        ScheduleTimeout spt = new ScheduleTimeout(10000);
         DeadTimeout sc = new DeadTimeout(spt, address);
         spt.setTimeoutEvent(sc);
         deadTimeoutIds.put(address,sc.getTimeoutId());
@@ -374,7 +375,6 @@ public class SwimComp extends ComponentDefinition {
     
     private void cancelDeadTimeout(NatedAddress address) {
         CancelTimeout cpt = new CancelTimeout(deadTimeoutIds.get(address));
-        System.out.println("Canceling DEAD TIMEOUT" + ackTimeoutIds.get(address));
         trigger(cpt, timer);
         deadTimeoutIds.remove(address);
     }
@@ -438,5 +438,33 @@ public class SwimComp extends ComponentDefinition {
         public NatedAddress getAddress() {
             return address;
         }
+    }
+    
+    private void printmyneigh() {
+            System.out.print("" + selfAddress.getId() + " xxxx");
+            
+            for(NatedAddress na : bootstrapNodes){
+                System.out.print(" - " + na.getId());
+            }
+            System.out.println();}
+    
+    private boolean checkNeighborsId(NatedAddress address){
+         boolean check = false;
+            for(NatedAddress na:bootstrapNodes){
+                if(na.getId()==address.getId()){
+                    check = true;
+                }
+            }
+            return check;
+    }
+    
+    private boolean checkSuspectedId(NatedAddress address){
+         boolean check = false;
+            for(NatedAddress na:suspectedNodes){
+                if(na.getId()==address.getId()){
+                    check = true;
+                }
+            }
+            return check;
     }
 }
