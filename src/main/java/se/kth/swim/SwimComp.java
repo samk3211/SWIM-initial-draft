@@ -32,6 +32,7 @@ import se.kth.swim.msg.Status;
 import se.kth.swim.msg.net.InfoPiggyback;
 import se.kth.swim.msg.net.InfoType;
 import se.kth.swim.msg.net.NetPing;
+import se.kth.swim.msg.net.NetPingReq;
 import se.kth.swim.msg.net.NetPong;
 import se.kth.swim.msg.net.NetStatus;
 import se.sics.kompics.ComponentDefinition;
@@ -92,6 +93,7 @@ public class SwimComp extends ComponentDefinition {
         subscribe(handleStop, control);
         subscribe(handlePing, network);
         subscribe(handlePong, network);
+        subscribe(handlePingReq,network);
         subscribe(handlePingTimeout, timer);
         subscribe(handleStatusTimeout, timer);
         subscribe(handleAckTimeout, timer);
@@ -180,6 +182,18 @@ public class SwimComp extends ComponentDefinition {
             
         }
     };
+    
+    
+    private Handler<NetPingReq> handlePingReq = new Handler<NetPingReq>(){
+
+        @Override
+        public void handle(NetPingReq event) {
+            log.info("{} received ping req from:{}, need to ping:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource(),event.getToPing()});
+            //not modifying yet as it may result in code collisions
+        }
+    
+    };
+    
     
     private Handler<NetPong> handlePong = new Handler<NetPong>() {
         
