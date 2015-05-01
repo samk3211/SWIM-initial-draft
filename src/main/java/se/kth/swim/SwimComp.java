@@ -21,9 +21,7 @@ package se.kth.swim;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -59,12 +57,11 @@ public class SwimComp extends ComponentDefinition {
     private Positive<Network> network = requires(Network.class);
     private Positive<Timer> timer = requires(Timer.class);
     
-    private Random rand = new Random();
-    
     private final NatedAddress selfAddress;
-    private final Set<NatedAddress> bootstrapNodes;
+    private final MembershipList membershipList;
+    //private final Set<NatedAddress> neighboursNodes;
     private final NatedAddress aggregatorAddress;
-    private Set<NatedAddress> suspectedNodes = new HashSet<NatedAddress>();
+    //private Set<NatedAddress> suspectedNodes = new HashSet<NatedAddress>();
     
     private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
     private HashMap<InfoPiggyback, Integer> updatesDisseminationCounter = new HashMap<InfoPiggyback, Integer>();
@@ -82,10 +79,7 @@ public class SwimComp extends ComponentDefinition {
     public SwimComp(SwimInit init) {
         this.selfAddress = init.selfAddress;
         log.info("{} initiating...", selfAddress);
-        this.bootstrapNodes = init.bootstrapNodes;
-        for(NatedAddress na : bootstrapNodes){
-            log.info("{} showing member list -> {}.", new Object[]{selfAddress.getId(), na.getId()});
-        }
+        this.membershipList = new MembershipList(init.bootstrapNodes,selfAddress);
         this.aggregatorAddress = init.aggregatorAddress;
         
         subscribe(handleStart, control);
@@ -105,7 +99,7 @@ public class SwimComp extends ComponentDefinition {
         public void handle(Start event) {
             log.info("{} starting...", new Object[]{selfAddress.getId()});
             
-            if (!bootstrapNodes.isEmpty()) {
+            if (!membershipList.isEmpty()) {
                 schedulePeriodicPing();
             }
             schedulePeriodicStatus();
@@ -136,10 +130,10 @@ public class SwimComp extends ComponentDefinition {
             receivedPings++;
             
             //Ping from unknown node
-            if(!checkNeighborsId(event.getHeader().getSource())){
+            if(!membershipList.contains(event.getHeader().getSource())){
                 log.info("{} Received ping from node that is not in my membership list {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
                 log.info("{} adding happily the node cccc {}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-                bootstrapNodes.add(event.getHeader().getSource());
+                membershipList.add(event.getHeader().getSource());
                 
                 //Maybe it is the first node in the list -> start pingTimeout
                 if (pingTimeoutId == null) {
@@ -149,17 +143,15 @@ public class SwimComp extends ComponentDefinition {
                 //save the now info to be disseminated
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.NEWNODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
                 
-            }
-            
-            if(checkNeighborsId(event.getHeader().getSource())){
-                suspectedNodes.remove(event.getHeader().getSource());
-                updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);       
+            } else {
+                if(membershipList.isSuspected(event.getHeader().getSource())){
+                    membershipList.unsuspectNode(event.getHeader().getSource());
+                    updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
+                }
             }
             
             log.info("{} sending pong to back to :{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-            
             updates = new ArrayList<InfoPiggyback>(updatesDisseminationCounter.keySet());
-            
             trigger(new NetPong(selfAddress, event.getHeader().getSource(), updates), network);
             
             //decrease counters and remove 0
@@ -189,35 +181,39 @@ public class SwimComp extends ComponentDefinition {
             log.info("{} received pong from:{}", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
             
             //handle the ack mechanism
-            if(checkNeighborsId(event.getSource())){
+            if(membershipList.contains(event.getSource())){
                 System.out.println("Ricevuto ack");
                 cancelAck(event.getSource());
             }
             
+            //Control that the pong is from a suspected node
+            if(membershipList.isSuspected(event.getHeader().getSource())){
+                membershipList.unsuspectNode(event.getHeader().getSource());
+                updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,event.getHeader().getSource()), DISSEMINATION_VALUE);
+            }
+            
             
             if(event.getContent().infoList!=null && event.getContent().infoList.size()>0){
-                
                 log.info("There is a list in Pong msg from ", new Object[]{selfAddress.getId(), event.getHeader().getSource()});
-                
                 for(Object ipb2 : event.getContent().infoList){
                     InfoPiggyback ipb = (InfoPiggyback)ipb2;
                     
                     //change to switch-case man :)
                     if(ipb.getInfoType()==InfoType.NEWNODE){
-                        if(!ipb.getInfoTarget().equals(selfAddress) && !checkNeighborsId(ipb.getInfoTarget())){
+                        if(!ipb.getInfoTarget().equals(selfAddress) && !membershipList.contains(ipb.getInfoTarget())){
                             log.info("{} adding happily the node from PB info {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
-                            bootstrapNodes.add(ipb.getInfoTarget());
+                            membershipList.add(ipb.getInfoTarget());
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.NEWNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     } else if (ipb.getInfoType()==InfoType.DEADNODE){
-                        if(checkNeighborsId(ipb.getInfoTarget())){
+                        if(membershipList.contains(ipb.getInfoTarget())){
                             log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
-                            bootstrapNodes.remove(ipb.getInfoTarget());
+                            membershipList.remove(ipb.getInfoTarget());
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.DEADNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     } else if (ipb.getInfoType()==InfoType.ALIVENODE){
-                        if(checkSuspectedId(ipb.getInfoTarget())){
-                            suspectedNodes.remove(ipb.getInfoTarget());
+                        if(membershipList.isSuspected(ipb.getInfoTarget())){
+                            membershipList.unsuspectNode(ipb.getInfoTarget());
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                             if(deadTimeoutIds.containsKey(ipb.getInfoTarget())){
                                 cancelDeadTimeout(ipb.getInfoTarget());
@@ -226,8 +222,16 @@ public class SwimComp extends ComponentDefinition {
                     } else if (ipb.getInfoType()==InfoType.SUSPECTEDNODE){
                         if(ipb.getInfoTarget().getId()==selfAddress.getId()){
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.ALIVENODE,selfAddress), DISSEMINATION_VALUE);
-                        } else if(!checkSuspectedId(ipb.getInfoTarget())){
-                            suspectedNodes.add(ipb.getInfoTarget());
+                       
+                        } else if (membershipList.contains(ipb.getInfoTarget()) && !membershipList.isSuspected(ipb.getInfoTarget())){
+                            
+//NOTE: should I add the node in suspected mode in this case?
+                            
+                            membershipList.suspectNode(ipb.getInfoTarget());
+                            //check that there is no timeout associated to the event.getAddress already, otherwise the prev UUID is lost
+                            if(!deadTimeoutIds.containsKey(ipb.getInfoTarget()))
+                                scheduleDeadTimeout(ipb.getInfoTarget());
+                            
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.SUSPECTEDNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     }
@@ -235,7 +239,7 @@ public class SwimComp extends ComponentDefinition {
                 }
             }
             receivedPongs++;
-        }     
+        }
     };
     
     
@@ -245,7 +249,7 @@ public class SwimComp extends ComponentDefinition {
         @Override
         public void handle(PingTimeout event) {
             
-            if(bootstrapNodes.isEmpty()){
+            if(membershipList.isEmpty()){
                 cancelPeriodicPing();
                 return;
             } else {
@@ -254,10 +258,8 @@ public class SwimComp extends ComponentDefinition {
                 }
             }
             
-            int neighborsSize = bootstrapNodes.size();
-            int randomNum = rand.nextInt(((neighborsSize-1) - 0) + 1) + 0;
-            //TODO improve this
-            NatedAddress partnerAddress = (NatedAddress) bootstrapNodes.toArray()[randomNum];
+
+            NatedAddress partnerAddress = membershipList.randomNode();
             
             //check if still waiting for an answer from the node
             if(!ackTimeoutIds.containsKey(partnerAddress)){
@@ -288,10 +290,10 @@ public class SwimComp extends ComponentDefinition {
             
             cancelAck(event.getAddress());
             
-            if(suspectedNodes.contains(event.getAddress())){
+            if(membershipList.isSuspected(event.getAddress())){
                 //do nothing
             } else {
-                suspectedNodes.add(event.getAddress());
+                membershipList.suspectNode(event.getAddress());
                 log.info("{}  suspects node: {}", new Object[]{selfAddress.getId(), event.getAddress().getId()});
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.SUSPECTEDNODE, event.getAddress()),DISSEMINATION_VALUE);
                 
@@ -310,13 +312,13 @@ public class SwimComp extends ComponentDefinition {
             if(deadTimeoutIds.containsKey(event.getAddress()))
                 cancelDeadTimeout(event.getAddress());
             
-            if(suspectedNodes.contains(event.getAddress())){
+            if(membershipList.isSuspected(event.getAddress())){
                 updatesDisseminationCounter.put(new InfoPiggyback(InfoType.DEADNODE, event.getAddress()),DISSEMINATION_VALUE);
-                if(checkNeighborsId(event.getAddress())){
+                if(membershipList.contains(event.getAddress())){
                     log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), event.getAddress().getId()});
-                    bootstrapNodes.remove(event.getAddress());
+                    membershipList.remove(event.getAddress());
                 }
-                suspectedNodes.remove(event.getAddress());
+                membershipList.unsuspectNode(event.getAddress());
             }
             
         }
@@ -440,31 +442,8 @@ public class SwimComp extends ComponentDefinition {
         }
     }
     
+
     private void printmyneigh() {
-            System.out.print("" + selfAddress.getId() + " xxxx");
-            
-            for(NatedAddress na : bootstrapNodes){
-                System.out.print(" - " + na.getId());
-            }
-            System.out.println();}
-    
-    private boolean checkNeighborsId(NatedAddress address){
-         boolean check = false;
-            for(NatedAddress na:bootstrapNodes){
-                if(na.getId()==address.getId()){
-                    check = true;
-                }
-            }
-            return check;
-    }
-    
-    private boolean checkSuspectedId(NatedAddress address){
-         boolean check = false;
-            for(NatedAddress na:suspectedNodes){
-                if(na.getId()==address.getId()){
-                    check = true;
-                }
-            }
-            return check;
+            membershipList.printNeighbour();
     }
 }
