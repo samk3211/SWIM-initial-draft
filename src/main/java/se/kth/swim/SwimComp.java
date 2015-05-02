@@ -64,6 +64,7 @@ public class SwimComp extends ComponentDefinition {
     private final NatedAddress aggregatorAddress;
     //private Set<NatedAddress> suspectedNodes = new HashSet<NatedAddress>();
     
+    
     private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
     private HashMap<InfoPiggyback, Integer> updatesDisseminationCounter = new HashMap<InfoPiggyback, Integer>();
     
