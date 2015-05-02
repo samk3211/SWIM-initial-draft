@@ -48,11 +48,10 @@ import se.sics.p2ptoolbox.util.network.NatedAddress;
 import se.sics.p2ptoolbox.util.network.impl.BasicAddress;
 import se.sics.p2ptoolbox.util.network.impl.BasicNatedAddress;
 
-/**
- * @author Alex Ormenisan <aaor@sics.se>
- */
+
 public class SwimScenario {
 
+    //testing
     private static long seed;
     private static InetAddress localHost;
 
