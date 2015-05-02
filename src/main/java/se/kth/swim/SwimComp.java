@@ -46,11 +46,11 @@ import se.sics.kompics.timer.Timeout;
 import se.sics.kompics.timer.Timer;
 import se.sics.p2ptoolbox.util.network.NatedAddress;
 
-/**
- * @author Alex Ormenisan <aaor@sics.se>
- */
+
 public class SwimComp extends ComponentDefinition {
+
     
+    //testing
     private static final Integer DISSEMINATION_VALUE = 3;
     
     private static final Logger log = LoggerFactory.getLogger(SwimComp.class);
@@ -62,6 +62,7 @@ public class SwimComp extends ComponentDefinition {
     //private final Set<NatedAddress> neighboursNodes;
     private final NatedAddress aggregatorAddress;
     //private Set<NatedAddress> suspectedNodes = new HashSet<NatedAddress>();
+    
     
     private ArrayList<InfoPiggyback> updates = new ArrayList<InfoPiggyback>();
     private HashMap<InfoPiggyback, Integer> updatesDisseminationCounter = new HashMap<InfoPiggyback, Integer>();
