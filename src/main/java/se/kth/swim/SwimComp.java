@@ -201,13 +201,13 @@ public class SwimComp extends ComponentDefinition {
                     //change to switch-case man :)
                     if(ipb.getInfoType()==InfoType.NEWNODE){
                         if(!ipb.getInfoTarget().equals(selfAddress) && !membershipList.contains(ipb.getInfoTarget())){
-                            log.info("{} adding happily the node from PB info {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
+                            //log.info("{} adding happily the node from PB info {}", new Object[]{selfAddress.getId(), ipb.getInfoTarget()});
                             membershipList.add(ipb.getInfoTarget());
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.NEWNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
                     } else if (ipb.getInfoType()==InfoType.DEADNODE){
                         if(membershipList.contains(ipb.getInfoTarget())){
-                            log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
+                            //log.info("Node {} is removing node {} since thinks it is DEAD", new Object[]{selfAddress.getId(), ipb.getInfoTarget().getId()});
                             membershipList.remove(ipb.getInfoTarget());
                             updatesDisseminationCounter.put(new InfoPiggyback(InfoType.DEADNODE,ipb.getInfoTarget()), DISSEMINATION_VALUE);
                         }
