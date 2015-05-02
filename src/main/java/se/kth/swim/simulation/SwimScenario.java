@@ -51,7 +51,7 @@ import se.sics.p2ptoolbox.util.network.impl.BasicNatedAddress;
 
 public class SwimScenario {
 
-    //testing
+    
     private static long seed;
     private static InetAddress localHost;
 
@@ -265,13 +265,19 @@ public class SwimScenario {
                 StochasticProcess startDeadPeer = new StochasticProcess() {
                     {
                         eventInterArrivalTime(constant(1000));
-                        raise(1, startNodeOp, new GenIntSequentialDistribution(new Integer[]{20}));
+                        Integer[] lista = new Integer[20];
+                        int t = 0;
+                        for(int i = 1; i < 41; i++){
+                            if(i%2==0)
+                                lista[t++] = i;
+                        }
+                        //raise(1, startNodeOp, new GenIntSequentialDistribution(new Integer[]{20}));
+                        raise(20, startNodeOp, new GenIntSequentialDistribution(lista));
                     }
                 };
 
                 StochasticProcess killPeers = new StochasticProcess() {
                     {
-                        eventInterArrivalTime(constant(1000));
                         eventInterArrivalTime(constant(1000));
                         Integer[] lista = new Integer[20];
                         int t = 0;
@@ -280,7 +286,7 @@ public class SwimScenario {
                                 lista[t++] = i;
                         }
                         //raise(1, killNodeOp, new ConstantDistribution(Integer.class, 20));
-                       raise(20, startNodeOp, new GenIntSequentialDistribution(lista));
+                       raise(20, killNodeOp, new GenIntSequentialDistribution(lista));
                         
                     }
                 };
@@ -310,13 +316,13 @@ public class SwimScenario {
 
                 startAggregator.start();
                 startPeers.startAfterTerminationOf(1000, startAggregator);
-                killPeers.startAfterTerminationOf(5000, startPeers);
-                 startDeadPeer.startAfterTerminationOf(20000, killPeers);
+               // killPeers.startAfterTerminationOf(5000, startPeers);
+                // startDeadPeer.startAfterTerminationOf(20000, killPeers);
 //                startAdditionalPeer.startAfterStartOf(10000, startPeers);
 //                stopPeers.startAfterTerminationOf(10000, startPeers);
 //                deadLinks1.startAfterTerminationOf(10000,startPeers);
 //                disconnectedNodes1.startAfterTerminationOf(10000, startPeers);
-                fetchSimulationResult.startAfterTerminationOf(50000, killPeers);
+                fetchSimulationResult.startAfterTerminationOf(200000, startPeers);
                 terminateAfterTerminationOf(1000, fetchSimulationResult);
 
             }
